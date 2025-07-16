@@ -1,49 +1,77 @@
 import os
-from dotenv import load_dotenv
+import asyncio
+import time
 from maniac import convert_stars_to_numerical
-from tmdbv3api import TMDb, Movie
+from dotenv import load_dotenv
+from themoviedb import aioTMDb 
 from letterboxdpy import user
 
-load_dotenv()
+async def main():
+    load_dotenv()
 
-tmdb = TMDb()
-tmdb_movie_api = Movie()
-letterboxd_username = "Borris"
+    api_key = os.environ.get("API_KEY")
+    if not api_key:
+        print("ERROR: API key not found. Exiting.")
+        return
 
-key_in_env = "API_KEY"
-retrieved_tmdb_api_key = os.environ.get(key_in_env)
+    tmdb = aioTMDb(key=api_key)
+    print("TMDb client initialized successfully.")
 
-if retrieved_tmdb_api_key:
-    tmdb.api_key = retrieved_tmdb_api_key
-    print(f"API key loaded successfully.")
-
-try:
+    letterboxd_username = "Borris"
+    print(f"Fetching films for {letterboxd_username}...")
     user_instance = user.User(letterboxd_username)
     films_watched_data = user.user_films_rated(user_instance)
-    
-    films_watched = [] 
-    for title, id, slug, rating in films_watched_data:
-        films_watched.append({
-            "Title":title,
-            'ID':id,
-            "Slug":slug,
-            "Rating":rating
-        })
-    
-    if films_watched:
-        for film in films_watched:
-            film["NumericalRating"] = convert_stars_to_numerical(film['Rating'])
-            try:
-                search_results = tmdb_movie_api.search(f"{film['Title']}")
-                if search_results:
-                    tmdb_id = search_results[0].id
-                    details = tmdb_movie_api.details(tmdb_id)
 
-            except Exception as e:
-                print("Error:", e)
-          
-    else:
-        print(f"Empty list for {letterboxd_username} or an error occured.")
+    films_to_process = []
+    for title, id, slug, rating in films_watched_data:
+        films_to_process.append({
+            "Title": title,
+            "Slug": slug,
+            "Rating": rating,
+            "NumericalRating": convert_stars_to_numerical(rating)
+        })
+
+    tasks = []
+    for film_dict in films_to_process:
+        task = fetch_tmdb_details(tmdb, film_dict)
+        tasks.append(task)
+
+    print(f"Starting concurrent fetching of {len(tasks)} TMDb details...")
+    enriched_films = await asyncio.gather(*tasks)
+    print("All TMDb details fetched.")
+
+    final_film_list = [film for film in enriched_films if film]
+    for film in final_film_list:
+        if 'tmdb_id' in film:
+            print(f"Enriched: {film['Title']} -> Genres: {film.get('tmdb_genres', 'N/A')}")
+        else:
+            print(f"Could not enrich: {film['Title']}")
+
+async def fetch_tmdb_details(tmdb: aioTMDb, film_dict: dict):
     
-except Exception as e:
-    print("Error:", e)
+    try:
+        time.sleep(0.05)
+        search_results = await tmdb.search().movies(film_dict['Title'])
+
+        if search_results:
+            first_result = search_results[0]
+            tmdb_id = first_result.id
+            
+            details = await tmdb.movie(tmdb_id).details()
+            
+            film_dict['tmdb_id'] = details.id
+            film_dict['tmdb_title'] = details.title
+            film_dict['tmdb_genres'] = [g.name for g in details.genres]
+            film_dict['tmdb_overview'] = details.overview
+
+            return film_dict
+        else:
+            print(f"  -> No TMDb results for: {film_dict['Title']}")
+
+    except Exception as e:
+        print(f"  -> Error processing {film_dict.get('Title', 'Unknown Film')}: {e}")
+    
+    return None
+
+if __name__ == "__main__":
+    asyncio.run(main())
