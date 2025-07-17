@@ -7,3 +7,4 @@ scikit-learn==1.7.0
 sentence-transformers==5.0.0
 gunicorn==23.0.0
 python-dotenv==1.0.1
+beautifulsoup4==4.12.2
