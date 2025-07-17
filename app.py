@@ -16,7 +16,7 @@ app = Flask(__name__)
 CORS(app)
 
 print("Loading AI model...")
-ai_model = SentenceTransformer('all-MiniLM-L6-v2')
+ai_model = SentenceTransformer('paraphrase-MiniLM-L3-v2')
 print("Model loaded.")
 
 api_key = os.environ.get("API_KEY")
