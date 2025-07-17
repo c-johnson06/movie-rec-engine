@@ -37,7 +37,6 @@ def recommend():
         return jsonify({"error": "Username is required"}), 400
 
     try:
-        # We run our main async function from within the synchronous route.
         recommendations = asyncio.run(get_ai_recommendations(username))
         return jsonify(recommendations)
     except Exception as e:
