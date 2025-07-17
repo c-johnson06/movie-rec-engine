@@ -1,5 +1,5 @@
 def convert_stars_to_numerical(star_rating_str):
-    if not star_rating_str: 
+    if '★' not in star_rating_str and '½' not in star_rating_str: 
         return None
     numerical_rating = star_rating_str.count('★')
     if '½' in star_rating_str:
