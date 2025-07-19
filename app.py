@@ -154,9 +154,8 @@ async def fetch_candidate_films(highly_rated_films: list):
             if genre in film.get('tmdb_genres', []) and film['tmdb_id'] not in seen_ids:
                 seed_movies.append(film)
                 seen_ids.add(film['tmdb_id'])
-                break
+    
     if not seed_movies: seed_movies.append(highly_rated_films[0])
-
     tasks = [tmdb_client.movie(seed['tmdb_id']).recommendations() for seed in seed_movies]
     print(seed_movies)
     try:
@@ -209,7 +208,9 @@ def score_and_rank_candidates(user_taste_vector, candidate_films, films_to_proce
                 "score": float(final_score),
                 "overview": candidate.overview,
                 "poster_path": candidate.poster_path,
-                "tmdb_id": candidate.id
+                "tmdb_id": candidate.id,
+                "director": candidate_director,
+                "genres": [genre.name for genre in candidate.genres]
             })
             
     return sorted(ai_recommendations, key=lambda x: x['score'], reverse=True)[:50]
