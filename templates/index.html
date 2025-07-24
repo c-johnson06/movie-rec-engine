@@ -17,13 +17,38 @@
         @keyframes spin {
             to { transform: rotate(360deg); }
         }
+        .truncate-fade {
+            position: relative;
+            height: 105px; /* Adjust height for about 5 lines of text */
+            overflow: hidden;
+        }
+        .truncate-fade::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 2.5rem;
+            background: linear-gradient(to bottom, transparent, #1f2937); /* Matches bg-gray-800 */
+        }
+        /* Modal Styles */
+        .modal-overlay {
+            transition: opacity 0.3s ease-in-out;
+        }
+        .modal-content {
+            transition: transform 0.3s ease-in-out, opacity 0.3s ease-in-out;
+        }
+        /* Class to lock body scrolling */
+        .body-lock {
+            overflow: hidden;
+        }
     </style>
 </head>
 <body class="bg-gray-900 text-white antialiased">
 
-    <div class="container mx-auto p-4 md:p-8 max-w-3xl">
+    <div class="container mx-auto p-4 md:p-8 max-w-6xl">
         
-        <header class="text-center mb-8">
+        <header class="text-center mb-8 max-w-3xl mx-auto">
             <h1 class="text-4xl md:text-5xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-500">
                 CineMind
             </h1>
@@ -32,7 +57,7 @@
             </p>
         </header>
 
-        <form id="recommender-form" class="bg-gray-800 p-6 rounded-xl shadow-lg border border-gray-700">
+        <form id="recommender-form" class="bg-gray-800 p-6 rounded-xl shadow-lg border border-gray-700 max-w-3xl mx-auto">
             <div class="flex flex-col sm:flex-row gap-4">
                 <input 
                     type="text" 
@@ -51,7 +76,7 @@
             <p id="error-message" class="text-red-400 text-sm mt-2 hidden"></p>
         </form>
 
-        <div id="status-section" class="text-center mt-8 p-6 bg-gray-800 rounded-xl shadow-lg border border-gray-700 hidden">
+        <div id="status-section" class="text-center mt-8 p-6 bg-gray-800 rounded-xl shadow-lg border border-gray-700 max-w-3xl mx-auto hidden">
             <div class="flex items-center justify-center mb-4">
                 <div class="loader ease-linear rounded-full border-4 border-t-4 border-gray-600 h-12 w-12"></div>
             </div>
@@ -60,11 +85,23 @@
 
         <div id="results-section" class="mt-8 hidden">
             <h2 class="text-2xl font-bold text-center mb-6">Your Top Recommendations</h2>
-            <div id="results-grid" class="grid grid-cols-1 gap-6">
+            <div id="results-grid" class="grid grid-cols-1 lg:grid-cols-2 gap-8">
             </div>
         </div>
 
     </div>
+
+    <!-- Modal Structure -->
+    <div id="movie-modal" class="fixed inset-0 z-50 flex items-center justify-center p-4 hidden">
+        <!-- Overlay -->
+        <div id="modal-overlay" class="absolute inset-0 bg-black/70 backdrop-blur-sm modal-overlay opacity-0"></div>
+        
+        <!-- Modal Content - UPDATED with overflow and max-height -->
+        <div id="modal-content" class="relative bg-gray-800 rounded-xl shadow-lg border border-gray-700 flex flex-col sm:flex-row max-w-4xl w-full modal-content opacity-0 transform scale-95 max-h-[90vh] overflow-y-auto">
+            <!-- Content will be injected here by JavaScript -->
+        </div>
+    </div>
+
 
     <script>
         document.addEventListener('DOMContentLoaded', function() {
@@ -76,22 +113,22 @@
             const resultsSection = document.getElementById('results-section');
             const resultsGrid = document.getElementById('results-grid');
             const errorMessage = document.getElementById('error-message');
+            const movieModal = document.getElementById('movie-modal');
+            const modalOverlay = document.getElementById('modal-overlay');
+            const modalContent = document.getElementById('modal-content');
 
             form.addEventListener('submit', function(event) {
                 event.preventDefault(); 
                 const username = usernameInput.value.trim();
-
                 if (!username) {
                     showError('Please enter a username.');
                     return;
                 }
-                
                 hideError();
                 resultsSection.classList.add('hidden');
                 resultsGrid.innerHTML = '';
                 statusSection.classList.remove('hidden');
                 statusText.textContent = `Fetching recommendations for "${username}"... This may take a moment.`;
-
                 getRealRecommendations(username);
             });
 
@@ -102,18 +139,14 @@
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ username: username }),
                     });
-
                     statusSection.classList.add('hidden');
-
                     if (!response.ok) {
                         const errorData = await response.json();
                         showError(errorData.error || 'An unknown server error occurred.');
                         return;
                     }
-
                     const recommendations = await response.json();
                     displayResults(recommendations);
-
                 } catch (error) {
                     console.error('Fetch error:', error);
                     statusSection.classList.add('hidden');
@@ -124,47 +157,141 @@
             function displayResults(recommendations) {
                 resultsSection.classList.remove('hidden');
                 if (!recommendations || recommendations.length === 0) {
-                    resultsGrid.innerHTML = `<p class="text-center text-gray-400">Could not generate recommendations. Please try a different username or check the server logs.</p>`;
+                    resultsGrid.innerHTML = `<p class="text-center text-gray-400 col-span-full">Could not generate recommendations. Please try a different username or check the server logs.</p>`;
                     return;
                 }
 
                 resultsGrid.innerHTML = ''; 
-                recommendations.forEach((rec, index) => {
+                recommendations.forEach((rec) => {
                     const letterboxdUrl = `https://letterboxd.com/tmdb/${rec.tmdb_id}`;
-
                     const posterUrl = rec.poster_path 
                         ? `https://image.tmdb.org/t/p/w500${rec.poster_path}`
                         : `https://placehold.co/500x750/1a202c/FFFFFF?text=${encodeURIComponent(rec.title)}`;
 
-                    const directorInfo = rec.director ? `<p class="text-xs text-gray-400 mt-1">Directed by <span class="font-semibold">${rec.director}</span></p>` : '';
-                    const genresInfo = rec.genres && rec.genres.length > 0 ? `<p class="text-xs text-gray-500 mt-2">${rec.genres.slice(0, 4).join(' • ')}</p>` : '';
+                    const directorLink = rec.director 
+                        ? `<a href="https://letterboxd.com/director/${rec.director.toLowerCase().replace(/ /g, '-')}/" target="_blank" rel="noopener noreferrer" class="font-semibold hover:text-blue-400 transition-colors">${rec.director}</a>` 
+                        : 'N/A';
+                    const directorInfo = `<p class="text-xs text-gray-400 mt-1">Directed by ${directorLink}</p>`;
+                    
+                    const genresInfo = rec.genres && rec.genres.length > 0 
+                        ? `<p class="text-xs text-gray-500 mt-2">${rec.genres.slice(0, 4).join(' • ')}</p>` 
+                        : '';
+                    
+                    const letterboxdRating = rec.vote_average ? (rec.vote_average / 2).toFixed(1) : null;
+                    const ratingInfo = letterboxdRating 
+                        ? `<div class="absolute top-2 right-2 bg-gray-900/80 text-white text-sm font-bold px-2 py-1 rounded-full flex items-center gap-1">
+                               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-4 h-4 text-yellow-400"><path fill-rule="evenodd" d="M10.868 2.884c.321-.662 1.215-.662 1.536 0l1.681 3.462a1 1 0 00.951.692h3.632c.712 0 1.008.972.462 1.454l-2.938 2.138a1 1 0 00-.364 1.118l1.681 3.462c.321.662-.524 1.454-1.088 1.034l-2.938-2.138a1 1 0 00-1.118 0l-2.938 2.138c-.563.42-1.409-.372-1.088-1.034l1.681-3.462a1 1 0 00-.364-1.118L2.98 8.492c-.546-.482-.25-1.454.462-1.454h3.632a1 1 0 00.951-.692l1.681-3.462z" clip-rule="evenodd" /></svg>
+                               <span>${letterboxdRating}</span>
+                           </div>` 
+                        : '';
 
                     const card = document.createElement('div');
-                    card.className = "bg-gray-800 rounded-xl shadow-lg border border-gray-700 overflow-hidden flex flex-col md:flex-row";
+                    card.className = "bg-gray-800 rounded-xl shadow-lg border border-gray-700 overflow-hidden flex flex-col sm:flex-row cursor-pointer transition-transform transform hover:scale-105";
                     
                     card.innerHTML = `
-                        <div class="md:w-1/3 flex-shrink-0">
-                            <img src="${posterUrl}" alt="Poster for ${rec.title}" class="object-cover w-full h-full">
+                        <div class="relative sm:w-56 flex-shrink-0">
+                            ${ratingInfo}
+                            <img src="${posterUrl}" alt="Poster for ${rec.title}" class="w-full h-auto sm:h-full object-cover">
                         </div>
-                        <div class="p-6 md:w-2/3 flex flex-col">
+                        <div class="p-6 sm:p-8 flex-grow flex flex-col">
                             <div>
-                                <h3 class="text-xl font-bold mb-1">
-                                    ${index + 1}. ${rec.title}
-                                </h3>
+                                <h3 class="text-lg font-bold">${rec.title}</h3>
                                 <p class="text-sm text-blue-400 font-semibold mb-2">Similarity Score: ${rec.score.toFixed(2)}</p>
                                 ${directorInfo}
                                 ${genresInfo}
-                                <p class="text-gray-400 text-sm mt-4">${rec.overview}</p>
+                                <div class="truncate-fade mt-4">
+                                    <p class="text-gray-400 text-sm leading-relaxed">${rec.overview}</p>
+                                </div>
                             </div>
-                            <div class="mt-4 pt-4 border-t border-gray-700">
-                                <a href="${letterboxdUrl}" target="_blank" rel="noopener noreferrer" class="inline-block bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg text-sm transition-colors">
+                            <div class="mt-auto pt-4">
+                                <a href="${letterboxdUrl}" target="_blank" rel="noopener noreferrer" class="watchlist-btn block w-full text-center bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg text-sm transition-colors">
                                     Add to Watchlist
                                 </a>
                             </div>
                         </div>
                     `;
+                    
+                    card.addEventListener('click', () => openModal(rec));
+                    
+                    const watchlistBtn = card.querySelector('.watchlist-btn');
+                    watchlistBtn.addEventListener('click', (event) => {
+                        event.stopPropagation();
+                    });
+
                     resultsGrid.appendChild(card);
                 });
+            }
+
+            function openModal(rec) {
+                // --- FIX: Add body-lock class to lock background scrolling ---
+                document.body.classList.add('body-lock');
+
+                const letterboxdUrl = `https://letterboxd.com/tmdb/${rec.tmdb_id}`;
+                const posterUrl = rec.poster_path 
+                    ? `https://image.tmdb.org/t/p/w500${rec.poster_path}`
+                    : `https://placehold.co/500x750/1a202c/FFFFFF?text=${encodeURIComponent(rec.title)}`;
+
+                const directorLink = rec.director 
+                    ? `<a href="https://letterboxd.com/director/${rec.director.toLowerCase().replace(/ /g, '-')}/" target="_blank" rel="noopener noreferrer" class="font-semibold hover:text-blue-400 transition-colors">${rec.director}</a>` 
+                    : 'N/A';
+                const directorInfo = `<p class="text-sm text-gray-400 mt-1">Directed by ${directorLink}</p>`;
+                
+                const genresInfo = rec.genres && rec.genres.length > 0 
+                    ? `<p class="text-sm text-gray-500 mt-2">${rec.genres.join(' • ')}</p>` 
+                    : '';
+                
+                const letterboxdRating = rec.vote_average ? (rec.vote_average / 2).toFixed(1) : null;
+                const ratingInfo = letterboxdRating 
+                    ? `<div class="absolute top-4 right-4 bg-gray-900/80 text-white text-base font-bold px-3 py-1 rounded-full flex items-center gap-2">
+                           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-5 h-5 text-yellow-400"><path fill-rule="evenodd" d="M10.868 2.884c.321-.662 1.215-.662 1.536 0l1.681 3.462a1 1 0 00.951.692h3.632c.712 0 1.008.972.462 1.454l-2.938 2.138a1 1 0 00-.364 1.118l1.681 3.462c.321.662-.524 1.454-1.088 1.034l-2.938-2.138a1 1 0 00-1.118 0l-2.938 2.138c-.563.42-1.409-.372-1.088-1.034l1.681-3.462a1 1 0 00-.364-1.118L2.98 8.492c-.546-.482-.25-1.454.462-1.454h3.632a1 1 0 00.951-.692l1.681-3.462z" clip-rule="evenodd" /></svg>
+                           <span>${letterboxdRating}</span>
+                       </div>` 
+                    : '';
+                
+                // --- UPDATED: The inner content no longer needs scroll/height classes ---
+                modalContent.innerHTML = `
+                    <div class="relative sm:w-1/3 flex-shrink-0">
+                        ${ratingInfo}
+                        <img src="${posterUrl}" alt="Poster for ${rec.title}" class="w-full h-full object-cover">
+                    </div>
+                    <div class="p-8 flex-grow flex flex-col">
+                        <div>
+                            <h3 class="text-3xl font-bold">${rec.title}</h3>
+                            ${directorInfo}
+                            ${genresInfo}
+                            <p class="text-gray-300 text-base leading-relaxed mt-4">${rec.overview}</p>
+                        </div>
+                        <div class="mt-auto pt-6">
+                            <a href="${letterboxdUrl}" target="_blank" rel="noopener noreferrer" class="block w-full text-center bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-6 rounded-lg text-base transition-colors">
+                                Add to Watchlist on Letterboxd
+                            </a>
+                        </div>
+                    </div>
+                    <button id="modal-close-btn" class="absolute top-4 right-4 text-gray-500 hover:text-white transition-colors">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
+                    </button>
+                `;
+
+                movieModal.classList.remove('hidden');
+                requestAnimationFrame(() => {
+                    modalOverlay.classList.remove('opacity-0');
+                    modalContent.classList.remove('opacity-0', 'scale-95');
+                });
+
+                document.getElementById('modal-close-btn').addEventListener('click', closeModal);
+                modalOverlay.addEventListener('click', closeModal);
+            }
+
+            function closeModal() {
+                // --- FIX: Remove the body-lock class ---
+                document.body.classList.remove('body-lock');
+
+                modalOverlay.classList.add('opacity-0');
+                modalContent.classList.add('opacity-0', 'scale-95');
+                setTimeout(() => {
+                    movieModal.classList.add('hidden');
+                    modalContent.innerHTML = '';
+                }, 300); // Wait for transition to finish
             }
 
             function showError(message) {

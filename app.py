@@ -201,7 +201,7 @@ def score_and_rank_candidates(user_taste_vector, candidate_films, films_to_proce
                     actor_score += 1
             normalized_actor_score = actor_score / (len(user_top_actors) + 1e-6)
 
-            final_score = (0.55 * plot_score) + (0.20 * normalized_genre_score) + (0.15 * director_score) + (0.10 * normalized_actor_score)
+            final_score = (0.58 * plot_score) + (0.20 * normalized_genre_score) + (0.12 * director_score) + (0.10 * normalized_actor_score)
 
             ai_recommendations.append({
                 "title": candidate.title,
@@ -210,7 +210,8 @@ def score_and_rank_candidates(user_taste_vector, candidate_films, films_to_proce
                 "poster_path": candidate.poster_path,
                 "tmdb_id": candidate.id,
                 "director": candidate_director,
-                "genres": [genre.name for genre in candidate.genres]
+                "genres": [genre.name for genre in candidate.genres],
+                "vote_average": candidate.vote_average
             })
             
     return sorted(ai_recommendations, key=lambda x: x['score'], reverse=True)[:50]
